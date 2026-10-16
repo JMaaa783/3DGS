@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>3DGS 控制台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3;
+          --dim:#8b949e; --acc:#58a6ff; --ok:#3fb950; --warn:#d29922; --err:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.6 "Segoe UI",system-ui,sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:14px 22px;
+           border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  header .hint { color:var(--dim); font-size:12px; }
+  main { max-width:1080px; margin:0 auto; padding:22px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:18px; margin-bottom:18px; }
+  .card h2 { font-size:14px; margin:0 0 12px; color:var(--dim); font-weight:600;
+             text-transform:uppercase; letter-spacing:.05em; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  button { background:#21262d; color:var(--fg); border:1px solid var(--line);
+           border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--dim); background:#30363d; }
+  button.primary { background:#1f6feb; border-color:#1f6feb; }
+  button.primary:hover { background:#388bfd; }
+  button.danger:hover { border-color:var(--err); color:var(--err); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input[type=text], input[type=number] { background:#0d1117; color:var(--fg);
+      border:1px solid var(--line); border-radius:6px; padding:5px 9px; font-size:13px; width:100px; }
+  label { color:var(--dim); font-size:13px; }
+  #drop { border:2px dashed var(--line); border-radius:8px; padding:26px; text-align:center;
+          color:var(--dim); cursor:pointer; transition:.15s; }
+  #drop.over { border-color:var(--acc); color:var(--acc); background:#161b2288; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12px; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid; }
+  .b-queued { color:var(--dim); border-color:var(--line); }
+  .b-running { color:var(--acc); border-color:#1f6feb44; background:#1f6feb18; }
+  .b-done { color:var(--ok); border-color:#3fb95044; background:#3fb95018; }
+  .b-error { color:var(--err); border-color:#f8514944; background:#f8514918; }
+  .bar { height:6px; background:#21262d; border-radius:3px; overflow:hidden; margin-top:5px; width:220px; }
+  .bar > i { display:block; height:100%; background:var(--acc); transition:width .6s; }
+  .detail { color:var(--dim); font-size:12px; }
+  .acts button { margin:2px 3px 2px 0; padding:4px 10px; font-size:12px; }
+  .empty { color:var(--dim); text-align:center; padding:18px; }
+  dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line);
+           border-radius:10px; padding:0; max-width:min(96vw,1200px); width:100%; }
+  dialog::backdrop { background:#000000b0; }
+  .dlg-head { display:flex; justify-content:space-between; align-items:center;
+              padding:10px 16px; border-bottom:1px solid var(--line); }
+  .dlg-head b { font-size:14px; }
+  #viewWrap { position:relative; }
+  #viewCanvas { width:100%; height:66vh; display:block; background:#0d1117; touch-action:none; }
+  #viewStat { position:absolute; left:12px; bottom:10px; font-size:12px; color:var(--dim);
+              background:#0008; padding:3px 9px; border-radius:5px; }
+  #viewTip { position:absolute; right:12px; bottom:10px; font-size:12px; color:var(--dim);
+             background:#0008; padding:3px 9px; border-radius:5px; }
+  #logBox { background:#0d1117; border:1px solid var(--line); border-radius:6px;
+            padding:10px; font:12px/1.5 Consolas,monospace; max-height:42vh; overflow:auto;
+            white-space:pre-wrap; word-break:break-all; color:#adbac7; }
+  #toast { position:fixed; top:16px; left:50%; transform:translateX(-50%);
+           background:#1f6feb; color:#fff; padding:8px 18px; border-radius:7px;
+           font-size:13px; opacity:0; pointer-events:none; transition:.25s; z-index:99; }
+  #toast.show { opacity:1; }
+  .path { color:var(--dim); font-size:12px; font-family:Consolas,monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>3DGS 控制台</h1>
+  <span class="hint">视频 → 抽帧 → COLMAP 位姿 → 高斯泼溅训练 → 网页漫游</span>
+  <span style="flex:1"></span>
+  <span class="hint" id="wsRoot"></span>
+</header>
+
+<main>
+  <div class="card">
+    <h2>1 · 投放视频</h2>
+    <div id="drop">点击选择 或 拖入视频文件（mp4 / mov / avi / mkv）</div>
+    <input type="file" id="file" accept="video/*" multiple hidden>
+    <div class="detail" style="margin-top:8px">
+      也可以直接把视频放进 <span class="path" id="inboxPath"></span>，
+      然后点下方"刷新"。拍摄要求见 README（慢移 0.3~0.5m/s、锁曝光、关防抖、环绕有闭环）。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2 · 任务列表 <span style="float:right"><button id="refresh">刷新</button></span></h2>
+    <table>
+      <thead><tr>
+        <th style="width:150px">任务</th><th style="width:90px">状态</th><th>进度</th>
+        <th style="width:300px">操作</th>
+      </tr></thead>
+      <tbody id="jobs"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>训练参数</h2>
+    <div class="row">
+      <label>迭代数 <input type="number" id="iters" value="20000" min="1000" step="1000"></label>
+      <label>抽帧 FPS <input type="number" id="fps" value="6" min="1" max="30"></label>
+      <span class="detail">迭代越多越精细（20000 ≈ 20 分钟）；FPS 建议保持 6，太低会导致位姿解算失败</span>
+    </div>
+  </div>
+</main>
+
+<!-- 漫游对话框 -->
+<dialog id="viewDlg">
+  <div class="dlg-head">
+    <b id="viewTitle">漫游</b>
+    <div>
+      <label><input type="checkbox" id="zUp"> 按 Z 轴朝上（画面颠倒时勾选）</label>
+      <button id="viewClose">关闭</button>
+    </div>
+  </div>
+  <div id="viewWrap">
+    <canvas id="viewCanvas"></canvas>
+    <div id="viewStat">加载中…</div>
+    <div id="viewTip">左键旋转 · 滚轮缩放 · 右键平移</div>
+  </div>
+</dialog>
+
+<!-- 日志对话框 -->
+<dialog id="logDlg">
+  <div class="dlg-head"><b id="logTitle">日志</b><button id="logClose">关闭</button></div>
+  <div style="padding:12px"><div id="logBox">…</div></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script src="/static/splat.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+let state = { jobs: [], running: null, viewer: false };
+let viewer = null;               // SplatViewer 实例
+let rafId = 0;
+let inboxHint = "";
+
+function toast(msg, ms = 2200) {
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+async function api(path, opt) {
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || j.msg || ("HTTP " + r.status));
+  return j;
+}
+
+// ---------- 上传 ----------
+const drop = $("#drop"), fileInput = $("#file");
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); uploadFiles(e.dataTransfer.files); };
+fileInput.onchange = () => { uploadFiles(fileInput.files); fileInput.value = ""; };
+
+async function uploadFiles(files) {
+  for (const f of files) {
+    drop.textContent = "上传中: " + f.name + " …";
+    try {
+      const j = await api("/api/upload?name=" + encodeURIComponent(f.name), {
+        method: "POST",
+        headers: { "Content-Length": f.size },
+        body: f,
+      });
+      toast("已接收 " + f.name + " → 任务 " + j.name);
+      drop.textContent = "上传完成: " + f.name;
+      setTimeout(() => drop.textContent = "点击选择 或 拖入视频文件（mp4 / mov / avi / mkv）", 2500);
+      poll();
+    } catch (e) {
+      drop.textContent = "上传失败: " + e.message;
+      toast("上传失败: " + e.message, 4000);
+    }
+  }
+}
+
+// ---------- 任务操作 ----------
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+
+async function startJob(name) {
+  try {
+    const j = await api("/api/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, iters: +$("#iters").value, fps: +$("#fps").value }),
+    });
+    toast(j.msg); poll();
+  } catch (e) { toast(e.message, 3500); }
+}
+
+async function deleteJob(name) {
+  if (!confirm("删除任务 " + name + "？会同时删除它的数据、模型和预览。")) return;
+  try {
+    const j = await api("/api/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    toast(j.msg); poll();
+  } catch (e) { toast(e.message, 3500); }
+}
+
+async function openViewer(name) {
+  try {
+    const j = await api("/api/viewer/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    toast("官方 Viewer 已启动，2 秒后打开 " + j.msg);
+    setTimeout(() => window.open(j.msg, "_blank"), 2000);
+  } catch (e) { toast(e.message, 4000); }
+}
+
+async function exportPly(name) {
+  try {
+    const j = await api("/api/export", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    toast(j.msg); poll();
+  } catch (e) { toast(e.message, 4000); }
+}
+
+async function stopViewer() {
+  try { await api("/api/viewer/stop", { method: "POST" }); toast("已停止官方 Viewer"); poll(); }
+  catch (e) { toast(e.message, 3000); }
+}
+
+async function showLog(name) {
+  $("#logTitle").textContent = "日志 · " + name;
+  $("#logDlg").showModal();
+  $("#logBox").textContent = "加载中…";
+  try {
+    const j = await api("/api/log?name=" + encodeURIComponent(name));
+    const box = $("#logBox");
+    box.textContent = j.log || "（暂无日志）";
+    box.scrollTop = box.scrollHeight;
+  } catch (e) { $("#logBox").textContent = e.message; }
+}
+
+// ---------- 网页漫游 ----------
+async function openSplat(name) {
+  const dlg = $("#viewDlg");
+  $("#viewTitle").textContent = "网页漫游 · " + name;
+  dlg.showModal();
+  const stat = $("#viewStat");
+  stat.textContent = "下载模型中…";
+
+  try {
+    if (!viewer) {
+      viewer = new SplatViewer($("#viewCanvas"));
+      viewer.onStats = (fps, n) =>
+        stat.textContent = n.toLocaleString() + " 高斯 · " + fps.toFixed(0) + " FPS";
+    }
+    const resp = await fetch("/assets/" + name + "/splat.ply");
+    if (!resp.ok) throw new Error("模型不存在（HTTP " + resp.status + "）");
+    const total = +resp.headers.get("Content-Length") || 0;
+    const buf = await readWithProgress(resp, total, p => stat.textContent = "下载模型 " + p + "%");
+    stat.textContent = "解析中…";
+    await new Promise(r => setTimeout(r, 30));   // 让文字先绘制
+    const scene = window.parsePLY(buf);
+    viewer.setScene(scene);
+    viewer.setZUp($("#zUp").checked);
+    stat.textContent = scene.count.toLocaleString() + " 高斯已就绪";
+    if (!rafId) loop();
+  } catch (e) {
+    stat.textContent = "失败: " + e.message;
+  }
+}
+
+async function readWithProgress(resp, total, onP) {
+  const rd = resp.body.getReader();
+  const chunks = []; let got = 0;
+  for (;;) {
+    const { done, value } = await rd.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    if (total) onP(Math.round(got * 100 / total));
+  }
+  const out = new Uint8Array(got); let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out.buffer;
+}
+
+function loop() {
+  rafId = requestAnimationFrame(loop);
+  if (viewer && $("#viewDlg").open) viewer.render();
+}
+
+$("#zUp").onchange = e => viewer && viewer.setZUp(e.target.checked);
+$("#viewClose").onclick = () => $("#viewDlg").close();
+$("#logClose").onclick = () => $("#logDlg").close();
+
+// ---------- 渲染列表 ----------
+const STAGE_TEXT = {
+  gsplat: "检查 CUDA 扩展", extract: "抽帧", colmap: "位姿求解",
+  train: "训练", export: "导出网页模型", preview: "预览渲染", done: "完成", error: "出错",
+};
+
+function render() {
+  const tb = $("#jobs");
+  if (!state.jobs.length) {
+    tb.innerHTML = '<tr><td colspan="4" class="empty">还没有任务，先上传一个视频</td></tr>';
+    return;
+  }
+  tb.innerHTML = state.jobs.map(j => {
+    const st = j.state, cls = "b-" + st;
+    const stageText = STAGE_TEXT[j.stage] || j.stage || (st === "running" ? "准备中" : "");
+    let progCell;
+    if (st === "running") {
+      const pct = (j.progress || 0).toFixed(1);
+      progCell = `<div class="bar"><i style="width:${pct}%"></i></div>
+                  <div class="detail">${esc(stageText)} · ${pct}%</div>`;
+    } else if (st === "done") {
+      progCell = `<div class="detail">100% · ${esc(j.created)}</div>`;
+    } else if (st === "error") {
+      progCell = `<div class="detail" style="color:var(--err)">${esc(j.detail)}</div>`;
+    } else {
+      progCell = `<div class="detail">${esc(j.created)}</div>`;
+    }
+
+    const acts = [];
+    if (st === "queued" || st === "error")
+      acts.push(`<button class="primary" onclick="startJob('${j.name}')">${st === "error" ? "重跑" : "开始"}</button>`);
+    if (st === "running")
+      acts.push(`<button disabled>运行中</button>`);
+    if (st === "done") {
+      if (j.has_ply) {
+        acts.push(`<button class="primary" onclick="openSplat('${j.name}')">网页漫游</button>`);
+      } else {
+        acts.push(`<button onclick="exportPly('${j.name}')">导出网页模型</button>`);
+      }
+      acts.push(`<button onclick="openViewer('${j.name}')">官方 Viewer</button>`);
+      if (j.has_preview)
+        acts.push(`<button onclick="window.open('/renders/${j.name}/preview.mp4')">预览视频</button>`);
+    }
+    acts.push(`<button onclick="showLog('${j.name}')">日志</button>`);
+    acts.push(`<button class="danger" onclick="deleteJob('${j.name}')">删除</button>`);
+
+    return `<tr>
+      <td><b>${esc(j.name)}</b><div class="detail">${esc(j.video)}<br>${esc(j.iters)} iter · ${esc(j.fps)}fps</div></td>
+      <td><span class="badge ${cls}">${st === "running" ? "运行中" : st === "done" ? "完成" : st === "error" ? "出错" : "排队"}</span></td>
+      <td>${progCell}</td>
+      <td class="acts">${acts.join("")}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function poll() {
+  try {
+    state = await api("/api/state");
+    render();
+    const vb = $("#wsRoot");
+    if (state.viewer) {
+      vb.innerHTML = `<span style="color:var(--ok)">官方 Viewer 运行中</span>
+        <button onclick="stopViewer()" style="margin-left:8px">停止</button>`;
+    } else vb.textContent = "";
+  } catch (e) { /* 服务器未就绪时忽略 */ }
+  setTimeout(poll, state.running ? 1200 : 3000);
+}
+
+$("#refresh").onclick = poll;
+$("#inboxPath").textContent = "\\data\\inbox\\";
+poll();
+</script>
+</body>
+</html>

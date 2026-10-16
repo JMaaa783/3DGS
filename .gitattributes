@@ -1,0 +1,57 @@
+# ===========================================================
+#  行尾与二进制类型约定
+#
+#  这个文件很重要：Windows 版 git 默认在 checkout 时把 LF 转成 CRLF，
+#  而 .sh 脚本一旦带上 \r，WSL 里的 bash 会全部报
+#      $'\r': command not found
+#  所以必须显式锁住 shell 脚本为 LF。
+# ===========================================================
+
+# 默认：按文件内容自动判断，仓库统一存 LF
+* text=auto eol=lf
+
+# ---------- 必须是 LF（在 WSL/Linux 里执行）----------
+*.sh        text eol=lf
+*.bash      text eol=lf
+*.py        text eol=lf
+*.js        text eol=lf
+*.html      text eol=lf
+*.css       text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.gitignore text eol=lf
+
+# ---------- 必须是 CRLF（Windows cmd.exe 执行）----------
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# ---------- 二进制，禁止任何转换 ----------
+*.ply       binary
+*.pt        binary
+*.pth       binary
+*.ckpt      binary
+*.mp4       binary
+*.mov       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.fbow      binary
+*.bin       binary
+*.pdf       binary
+*.whl       binary
+
+# ---------- 导出统计：让 Gitee / git 能识别语言构成 ----------
+pipeline.sh linguist-language=Shell
+run_job.sh  linguist-language=Shell
+viewer.sh   linguist-language=Shell
+splat.js    linguist-language=JavaScript
+
+# ---------- 忽略生成目录的语言统计 ----------
+web/assets/     linguist-generated
+outputs/        linguist-vendored
+outputs_*/      linguist-vendored
+renders/        linguist-vendored
+renders_*/      linguist-vendored
+debug/          linguist-documentation
